@@ -2,33 +2,45 @@
 -compile(export_all).
 
 % TODO: Netzwerkkommunikation
-% TODO: Siegbedingung
 % TODO: Gegnerisches Feld maskieren
-% TODO: Treffererkennung
 % TODO: Fehlererkennung, z.B. Feld nicht doppelt belegbar
 % TODO: Feldgroesse anpassen
+% TODO: Kommentieren, Cleanup
 
 do_it() ->
     receive
-            {start} -> 
+            {_, {_, _}, {0, _}} -> % defeat
+                io:format("~nLoser!"),
+                exit(normal);
+            {start} -> % init actor 1
                 io:format("~nCurrent Actor: ~p~n", [self()]),
                 Myfield = init(),
                 Pid = spawn(actor, do_it, []),
-                Pid ! {self(), {Myfield, {}}};
-            {From, {Hisfield, {}}} ->
+                Pid ! {self(), {Myfield, {}}, {66, 3}};
+            {From, {Hisfield, {}}, {_, 3}} -> % init actor 2
                 io:format("~nCurrent Actor: ~p~n", [self()]),
                 Myfield = init(),
-                From ! {self(), {Myfield, Hisfield}};
-            {From, {Hisfield, Myfield}} ->
+                From ! {self(), {Myfield, Hisfield}, {3, 3}};
+            {From, {Hisfield, Myfield}, {Myships, Hisships}} -> 
                 io:format("~nCurrent Actor: ~p~n", [self()]),
                 io:format("~n~n~n"),
                 io:format("Opponent field:~n"),
                 print_field(Hisfield),
                 io:format("Your field:~n"),
                 print_field(Myfield),
-                Hisfieldnew = shoot(Hisfield),
+                Shotresult = shoot(Hisfield, Hisships),
+                Hisfieldnew = element(1, Shotresult),
+                Hisshipsnew = element(2, Shotresult),
+                                                
                 print_field(Hisfieldnew),
-                From ! {self(), {Myfield, Hisfieldnew}}
+                From ! {self(), {Myfield, Hisfieldnew}, {Hisshipsnew, Myships}},
+                if 
+                    Hisshipsnew == 0 -> 
+                        io:format("Victory!~n"),
+                        exit(normal);
+                    Hisshipsnew > 0 -> 
+                        io:format("")
+                end
     end,
     do_it().
             
@@ -38,7 +50,7 @@ init() ->
     print_field(Fieldnew),
     Fieldnew.
     
-shoot(Field) ->
+shoot(Field, Ships) ->
     io:format("Take a shot: [s]hoot <row> <column>~n"),
     io:format("Example: s 2 4 to shoot at field on row 2, column 4~n"),
     Input = io:fread('enter>', "~s~d~d"),
@@ -50,11 +62,11 @@ shoot(Field) ->
         Char == '*' -> 
             Fieldnew = update_field(Field, Row, Column, 'x'),
             io:format("Hit!~n"),
-            Fieldnew;
+            {Fieldnew, Ships - 1};
         Char == " " ->
             Fieldnew = update_field(Field, Row, Column, 'o'),
             io:format("Miss!~n"),
-            Fieldnew
+            {Fieldnew, Ships}
     end.
     
             
@@ -93,7 +105,12 @@ print_field(Field) ->
 
 update_field(Field, Row, Column, Char) ->
     C = element(Row, Field),
-    Cnew = setelement(Column, C, Char),
-    Fieldnew = setelement(Row, Field, Cnew),
-    Fieldnew.
+    if
+        Char == '*' and element(Column, C) == '*' -> false;
+        true -> 
+            Cnew = setelement(Column, C, Char),
+            Fieldnew = setelement(Row, Field, Cnew),
+            Fieldnew
+    end.
+    
     
