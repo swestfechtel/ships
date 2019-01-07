@@ -2,4 +2,7 @@
 -export([main/0]).
 
 main() -> 
-    io:write("Starting...").
+    io:write("Starting..."),
+    Pid = spawn(actor, do_it, []),
+    Pid ! {start}.
+    

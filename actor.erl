@@ -1,21 +1,63 @@
 -module(actor).
 -compile(export_all).
 
-dew_it() ->
-    receive
-        {From, start} ->
-            Field = init(),
-            
-return_pid ->
-    receive
-        {From} -> From ! self()
-    end.
+% TODO: Netzwerkkommunikation
+% TODO: Siegbedingung
+% TODO: Gegnerisches Feld maskieren
+% TODO: Treffererkennung
+% TODO: Fehlererkennung, z.B. Feld nicht doppelt belegbar
+% TODO: Feldgroesse anpassen
 
+do_it() ->
+    receive
+            {start} -> 
+                io:format("~nCurrent Actor: ~p~n", [self()]),
+                Myfield = init(),
+                Pid = spawn(actor, do_it, []),
+                Pid ! {self(), {Myfield, {}}};
+            {From, {Hisfield, {}}} ->
+                io:format("~nCurrent Actor: ~p~n", [self()]),
+                Myfield = init(),
+                From ! {self(), {Myfield, Hisfield}};
+            {From, {Hisfield, Myfield}} ->
+                io:format("~nCurrent Actor: ~p~n", [self()]),
+                io:format("~n~n~n"),
+                io:format("Opponent field:~n"),
+                print_field(Hisfield),
+                io:format("Your field:~n"),
+                print_field(Myfield),
+                Hisfieldnew = shoot(Hisfield),
+                print_field(Hisfieldnew),
+                From ! {self(), {Myfield, Hisfieldnew}}
+    end,
+    do_it().
+            
 init() ->
     Field = init_field(),
     Fieldnew = place_ships(Field, 3),
     print_field(Fieldnew),
     Fieldnew.
+    
+shoot(Field) ->
+    io:format("Take a shot: [s]hoot <row> <column>~n"),
+    io:format("Example: s 2 4 to shoot at field on row 2, column 4~n"),
+    Input = io:fread('enter>', "~s~d~d"),
+    Row = lists:nth(2, element(2,Input)),
+    Column = lists:nth(3, element(2,Input)),
+    Ro = element(Row, Field),
+    Char = element(Column, Ro),
+    if
+        Char == '*' -> 
+            Fieldnew = update_field(Field, Row, Column, 'x'),
+            io:format("Hit!~n"),
+            Fieldnew;
+        Char == " " ->
+            Fieldnew = update_field(Field, Row, Column, 'o'),
+            io:format("Miss!~n"),
+            Fieldnew
+    end.
+    
+            
     
 place_ships(Field, Ships) ->
     if
