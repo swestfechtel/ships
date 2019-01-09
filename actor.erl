@@ -1,7 +1,6 @@
 -module(actor).
 -compile(export_all).
 
-% TODO: Netzwerkkommunikation
 % TODO: Feldgroesse anpassen
 % TODO: Kommentieren, Cleanup
 % TODO: ggf Feldgroesse und Schiffsanzahl frei waehlbar
@@ -15,10 +14,14 @@ connect() ->
     Opponent = lists:nth(1, element(2,Input)),
     io:format("Opponent: ~s~n", [Opponent]),
     net_kernel:connect_node(Opponent),
-    %register(shell, self()),
+    register(shell,self()),
     Myfield = init(),
-    %rpc:async_call(Opponent,actor,do_it,[]),
+    %rpc:async_call(Opponent,actor,registershell,[]),
     {shell, Opponent} ! {self(), {Myfield, {}}, {66, 3}},
+    do_it().
+    
+host() ->
+    register(shell,self()),
     do_it().
 
 do_it() ->
