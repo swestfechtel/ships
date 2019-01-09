@@ -8,116 +8,120 @@
 %Feldgroesse : 4 x 4
 %Schiffe: 3
 
+% connect: Spiel starten; Ablauf: 
+% 1. Spieler 1 stellt Verbindung zu Spieler 2 herstellen
+% 2. Spieler 2 erwartet mit host() Spielfeld von Spieler 1
+% 3. Spieler 1 besetzt das eigene Spielfeld und wartet auf Spieler 2
 connect() ->
     io:format("Enter opponent name: (name@hostname)~n"),
     Input = io:fread('enter>',"~a"),
     Opponent = lists:nth(1, element(2,Input)),
     io:format("Opponent: ~s~n", [Opponent]),
-    net_kernel:connect_node(Opponent),
-    register(shell,self()),
-    Myfield = init(),
+    net_kernel:connect_node(Opponent), % Verbindung zur Gegner-Node herstellen
+    register(shell,self()), % Shell registrieren
+    Myfield = init(), % Eigenes Feld besetzen
     %rpc:async_call(Opponent,actor,registershell,[]),
-    {shell, Opponent} ! {self(), {Myfield, {}}, {66, 3}},
-    do_it().
-    
+    {shell, Opponent} ! {self(), {Myfield, {}}, {66, 3}}, % eigenes Feld an Gegner uebermitteln
+    do_it(). % in receive routine springen
+
+% shell registrieren & in receive routine springen (fuer Spieler 2, rpc:async_call kein Effekt??)
 host() ->
     register(shell,self()),
     do_it().
 
+% Spielroutine
 do_it() ->
     receive
-            {_, {_, _}, {0, _}} -> % defeat
+            {_, {_, _}, {0, _}} -> % defeat: Zahl der eignene Schiffe = 0
                 io:format("~nLoser!"),
                 exit(normal);
-            %{start} -> % init actor 1
-            %    io:format("~nCurrent Actor: ~p~n", [self()]),
-            %    Myfield = init(),
-            %    Pid = spawn(actor, do_it, []),
-            %    Pid ! {self(), {Myfield, {}}, {66, 3}};
-            {From, {Hisfield, {}}, {_, 3}} -> % init actor 2
+
+            {From, {Hisfield, {}}, {_, 3}} -> % init actor 2: Eigenes Feld leer
                 io:format("~nFrom: ~p~n", [From]),
-                Myfield = init(),
-                %register(shell, self()),
-                From ! {self(), {Myfield, Hisfield}, {3, 3}};
-            {From, {Hisfield, Myfield}, {Myships, Hisships}} -> 
-                %io:format("~nCurrent Actor: ~p~n", [self()]),
+                Myfield = init(), % eigenes Feld besetzen
+                From ! {self(), {Myfield, Hisfield}, {3, 3}}; % Antwort an Gegenspieler
+                
+            {From, {Hisfield, Myfield}, {Myships, Hisships}} -> % Schussroutine
                 io:format("~n~n~n"),
                 io:format("Opponent field:~n"),
-                print_field(Hisfield, true),
+                print_field(Hisfield, true), % Gegnerfeld anzeigen
                 io:format("Your field:~n"),
-                print_field(Myfield, false),
-                Shotresult = shoot(Hisfield, Hisships),
-                Hisfieldnew = element(1, Shotresult),
-                Hisshipsnew = element(2, Shotresult),
+                print_field(Myfield, false), % Eigenes Feld anzeigen
+                Shotresult = shoot(Hisfield, Hisships), % Schuss abegeben
+                Hisfieldnew = element(1, Shotresult), % Gegnerisches Feld updaten
+                Hisshipsnew = element(2, Shotresult), % Gegnerische Schiffsanzahl updaten
                                                 
-                print_field(Hisfieldnew, true),
-                From ! {self(), {Myfield, Hisfieldnew}, {Hisshipsnew, Myships}},
+                print_field(Hisfieldnew, true), % Neues gegnerisches Feld anzeigen
+                From ! {self(), {Myfield, Hisfieldnew}, {Hisshipsnew, Myships}}, % Antwort an Gegenspieler
                 if 
-                    Hisshipsnew == 0 -> 
+                    Hisshipsnew == 0 -> % Wenn Gegenspieler keine Schiffe mehr hat -> Victory, Spiel auf node beenden
                         io:format("Victory!~n"),
                         exit(normal);
                     Hisshipsnew > 0 -> 
                         io:format("")
                 end
     end,
-    do_it().
-            
+    do_it(). % Rekursion
+
+% Eigenes Feld besetzen
 init() ->
-    Field = init_field(),
-    Fieldnew = place_ships(Field, 3),
-    print_field(Fieldnew, false),
-    Fieldnew.
+    Field = init_field(), % Leeres Feld erzeugen
+    Fieldnew = place_ships(Field, 3), % Schiffe platzieren
+    print_field(Fieldnew, false), % Feld ausgeben
+    Fieldnew. % Feld zurueckgeben
     
+% Schuss setzen
 shoot(Field, Ships) ->
     io:format("Take a shot: [s]hoot <row> <column>~n"),
     io:format("Example: s 2 4 to shoot at field on row 2, column 4~n"),
-    Input = io:fread('enter>', "~s~d~d"),
-    Row = lists:nth(2, element(2,Input)),
-    Column = lists:nth(3, element(2,Input)),
+    Input = io:fread('enter>', "~s~d~d"), % Koordinaten einlesen
+    Row = lists:nth(2, element(2,Input)), % Zeilenindex auslesen
+    Column = lists:nth(3, element(2,Input)), % Spaltenindex auslesen
     if
-        (Row < 1) or (Row > 4) ->
+        (Row < 1) or (Row > 4) -> % Koordinaten auf Korrektheit pruefen...
             io:format("Error: Field does not exist, try again!~n"),
             shoot(Field, Ships);
         (Column < 1) or (Column > 4) ->
             io:format("Error: Field does not exist, try again!~n"),
             shoot(Field, Ships);
         true -> 
-            Ro = element(Row, Field),
-            Char = element(Column, Ro),
+            Ro = element(Row, Field), % Zeilentupel auslesen
+            Char = element(Column, Ro), % Kaestchen auslesen
             if
-                Char == '*' -> 
-                    Fieldnew = update_field(Field, Row, Column, 'x'),
+                Char == '*' -> % * ^= Schiff => Treffer
+                    Fieldnew = update_field(Field, Row, Column, 'x'), % Kaestchen updaten
                     io:format("Hit!~n"),
-                    {Fieldnew, Ships - 1};
-                true ->
-                    Fieldnew = update_field(Field, Row, Column, 'o'),
+                    {Fieldnew, Ships - 1}; % Neues Feld und Schiffsanzahl - 1 zurueckgeben
+                true -> % sonst kein Treffer...
+                    Fieldnew = update_field(Field, Row, Column, 'o'), % Kaestchen updaten
                     io:format("Miss!~n"),
-                    {Fieldnew, Ships}
+                    {Fieldnew, Ships} % Neues Feld zurueckgeben
             end
     end.
             
     
+% Schiffe platzieren
 place_ships(Field, Ships) ->
     if
-        Ships == 0 -> Field;
+        Ships == 0 -> Field; % Alle Schiffe platziert...
         Ships > 0 ->
-            print_field(Field, false),
+            print_field(Field, false), % Feld ausgeben
             io:format("Ships to place: ~B | Place ship: [p]lace <row> <column>~n", [Ships]),
             io:format("Example: p 2 4 to place a ship on column 4 in row 2.~n"),
-            Input = io:fread('enter>', "~s~d~d"),
-            Row = lists:nth(2, element(2,Input)),
-            Column = lists:nth(3, element(2,Input)),
+            Input = io:fread('enter>', "~s~d~d"), % Koordinaten einlesen
+            Row = lists:nth(2, element(2,Input)), % Zeilenindex auslesen
+            Column = lists:nth(3, element(2,Input)), % Spaltenindex auslesen
             if
-            (Row < 1) or (Row > 4) ->
+            (Row < 1) or (Row > 4) -> % Koordinaten auf Korrektheit pruefen...
                 io:format("Error: Field does not exist, try again!~n"),
                 place_ships(Field, Ships);
             (Column < 1) or (Column > 4) ->
                 io:format("Error: Field does not exist, try again!~n"),
                 place_ships(Field, Ships);
             true -> 
-                Fieldnew = update_field(Field, Row, Column, '*'),
+                Fieldnew = update_field(Field, Row, Column, '*'), % Schiff setzen
                 if 
-                    not Fieldnew -> 
+                    not Fieldnew -> % Pruefen, dass kein Kaestchen doppelt besetzt...
                         io:format("Error: Field already taken, try again!~n"),
                         place_ships(Field, Ships);
                     true -> 
@@ -126,6 +130,7 @@ place_ships(Field, Ships) ->
             end
     end.
 
+% Leeres Feld erzeugen
 init_field() ->
     A = {" ", " ", " ", " "},
     B = {" ", " ", " ", " "},
@@ -135,10 +140,10 @@ init_field() ->
     R.
     
 
-    
+% Feld ausgeben
 print_field(Field, Enemy) ->
     if 
-        Enemy ->
+        Enemy -> % Gegnerisches Feld -> Schiffspositionen maskieren...
             
             
             A = tuple_to_list(element(1, Field)),
@@ -168,6 +173,7 @@ print_field(Field, Enemy) ->
             io:format("(~s)(~s)(~s)(~s)~n", [element(1,D), element(2,D), element(3,D), element(4,D)])
     end.
 
+% Feld updaten
 update_field(Field, Row, Column, Char) ->
     C = element(Row, Field),
     if
