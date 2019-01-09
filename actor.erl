@@ -2,7 +2,6 @@
 -compile(export_all).
 
 % TODO: Netzwerkkommunikation
-% TODO: Gegnerisches Feld maskieren
 % TODO: Feldgroesse anpassen
 % TODO: Kommentieren, Cleanup
 % TODO: ggf Feldgroesse und Schiffsanzahl frei waehlbar
@@ -10,22 +9,35 @@
 %Feldgroesse : 4 x 4
 %Schiffe: 3
 
+connect() ->
+    io:format("Enter opponent name: (name@hostname)~n"),
+    Input = io:fread('enter>',"~a"),
+    Opponent = lists:nth(1, element(2,Input)),
+    io:format("Opponent: ~s~n", [Opponent]),
+    net_kernel:connect_node(Opponent),
+    %register(shell, self()),
+    Myfield = init(),
+    %rpc:async_call(Opponent,actor,do_it,[]),
+    {shell, Opponent} ! {self(), {Myfield, {}}, {66, 3}},
+    do_it().
+
 do_it() ->
     receive
             {_, {_, _}, {0, _}} -> % defeat
                 io:format("~nLoser!"),
                 exit(normal);
-            {start} -> % init actor 1
-                io:format("~nCurrent Actor: ~p~n", [self()]),
-                Myfield = init(),
-                Pid = spawn(actor, do_it, []),
-                Pid ! {self(), {Myfield, {}}, {66, 3}};
+            %{start} -> % init actor 1
+            %    io:format("~nCurrent Actor: ~p~n", [self()]),
+            %    Myfield = init(),
+            %    Pid = spawn(actor, do_it, []),
+            %    Pid ! {self(), {Myfield, {}}, {66, 3}};
             {From, {Hisfield, {}}, {_, 3}} -> % init actor 2
-                io:format("~nCurrent Actor: ~p~n", [self()]),
+                io:format("~nFrom: ~p~n", [From]),
                 Myfield = init(),
+                %register(shell, self()),
                 From ! {self(), {Myfield, Hisfield}, {3, 3}};
             {From, {Hisfield, Myfield}, {Myships, Hisships}} -> 
-                io:format("~nCurrent Actor: ~p~n", [self()]),
+                %io:format("~nCurrent Actor: ~p~n", [self()]),
                 io:format("~n~n~n"),
                 io:format("Opponent field:~n"),
                 print_field(Hisfield, true),
